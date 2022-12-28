@@ -1,0 +1,500 @@
+#!/usr/bin/env perl
+#
+# independ - C compiler independent formatting of Makefile dependency lines
+#
+# This tool formats C compiler dependency output in a C compiler independent way.
+#
+# C compilers such as gcc and clang use flags such as -MM to output C compiler
+# dependencies such as:
+#
+# foo.o: bar.h baz.h curds.h something.h otherthing.h anotherthing.h foo.h \
+#   whey.h fizzbin.h
+# baz.o: header.h bar.h curds.h whey.h tuffett.h spider.h foobar.h eek.h baz.h \
+#   details.h moredetails.h evenmoredetails.h lessdetails.h evenlessdetails.h \
+#   eek.h meep.h pheep.h greple.h somefile.h whonamedthisfile.h wedontknow.h \
+#   theyleftthecompany.h wearetoolazytorename.h theseverylonguselessfilenames.h \
+#   fizzbin.h morefizzbin.h fizzbin-rules.h random-rules.h rules.h norule6.h \
+#   fizzbin.h wik.h also-wik.h also-also-wik.h majestik-moose.h a-moose-once.h \
+#   bit-my-sister.h mynd-you.h moose-bites-kan-be-pretti-nasti.h
+# foo.o: zzz.h
+# baz.o: eek-as-beep.h meep-as-ascii-bell.h bar_h.h meep-beep.h
+#
+# While both gcc and clang support -MM, the output they produce is slightly
+# different.  Different compilers have different indentation rules for long
+# dependency lines.  The order that dependency files are printed may be different
+# for different compilers.  In some cases the same dependency file may be printed
+# more than once.  In some cases, different versions of the same compiler will
+# produce different -MM output.
+#
+# One problem with different dependency outputs us that doing "make depend"
+# will produce different Makefile on different systems.  This changing dependency
+# output results in needless changes to the Makefile when no actual dependency
+# changes actually occurred.
+#
+# By piping Makefile dependency lines through this filter, you will have
+# consistent Makefile dependency lines across all of your systems.
+#
+# Given the above Makefile dependency lines, independ will, by default, always print:
+#
+# baz.o: a-moose-once.h also-also-wik.h also-wik.h bar.h bar_h.h baz.h \
+#     bit-my-sister.h curds.h details.h eek-as-beep.h eek.h evenlessdetails.h \
+#     evenmoredetails.h fizzbin-rules.h fizzbin.h foobar.h greple.h header.h \
+#     lessdetails.h majestik-moose.h meep-as-ascii-bell.h meep-beep.h meep.h \
+#     moose-bites-kan-be-pretti-nasti.h moredetails.h morefizzbin.h \
+#     mynd-you.h norule6.h pheep.h random-rules.h rules.h somefile.h spider.h \
+#     theseverylonguselessfilenames.h theyleftthecompany.h tuffett.h \
+#     wearetoolazytorename.h wedontknow.h whey.h whonamedthisfile.h wik.h
+# foo.o: anotherthing.h bar.h baz.h curds.h fizzbin.h foo.h otherthing.h \
+#     something.h whey.h zzz.h
+#
+# Copyright (c) 2022 by Landon Curt Noll.  All Rights Reserved.
+#
+# Permission to use, copy, modify, and distribute this software and
+# its documentation for any purpose and without fee is hereby granted,
+# provided that the above copyright, this permission notice and text
+# this comment, and the disclaimer below appear in all of the following:
+#
+#       supporting documentation
+#       source copies
+#       source works derived from this source
+#       binaries derived from this source or from derived source
+#
+# LANDON CURT NOLL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+# INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO
+# EVENT SHALL LANDON CURT NOLL BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+# CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+# USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+# OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+#
+# chongo (Landon Curt Noll, http://www.isthe.com/chongo/index.html) /\oo/\
+#
+# Share and enjoy! :-)
+
+# requirements
+#
+use strict;
+use bytes;
+use vars qw($opt_v $opt_cap_v $opt_i $opt_h);
+use Getopt::Long qw(:config no_ignore_case);
+use Text::Tabs;
+use Text::Wrap;
+use warnings;
+
+# version
+#
+my $VERSION = "1.00 2022-12-27";
+
+# my vars
+#
+my $file;	# required argument
+
+# usage and help
+#
+my $usage = "$0 [-h] [-v lvl] [-V] [-i str] [-c columns] [file]";
+my $indent = "    ";	# default continued lines with this string
+my $columns = 76;	# default column limit - because 1776 was too long :-)
+my $opt_v = 0;		# default debugging level
+my $help = qq{$usage
+
+	-h		print this usage message and VERSION string and exit 0
+	-v lvl		verbose / debugging level (def: $opt_v)
+	-V		print version and exit 0
+	-i str		indent continued lines with str (def: "$indent")
+			NOTE: A tab in str is counted as a column width of 8.
+
+	-c columns	try to limit dependency lines to columns chars, 0 ==> no limit (def: $columns)
+
+			NOTE: If a dependency filename is extremely long (relative to columns), then
+			      the filename will be printed, after the indent (and followed by possible
+			      space backslash, even if such a line is too long.  In all other cases lines
+			      will not exceed a width of columns.
+
+	file		File to read (def: stdin)
+
+			NOTE: If specify reading from stdin, either supply no file argument, or
+			      end command line with: -- -
+
+NOTE: Empty lines, lines with only whitespace, and lines beginning with # are ignored.
+      Lines that end with \ (backslash) are assumed to be continued on the next line.
+      If a Makefile dependency rule does not start with a filename followed by a : (colon),
+      or if Makefile dependency rule has more than one : (colon), a warning message is
+      printed on stderr and that line is ignored.
+
+Exit codes:
+     0   all is well
+     1   some warning about invalid lines was printed
+     2   cannot open filename for reading
+     3   -h and help string printed or -V and version string printed
+     4   command line error
+ >= 10   internal error
+};
+my %optctl = (
+    "h" => \$opt_h,
+    "v=i" => \$opt_v,
+    "V" => \$opt_cap_v,
+    "c=i" => \$columns,
+    "i=s" => \$indent,
+);
+
+
+# function prototypes
+#
+sub error($@);
+sub warning(@);
+sub dbg($@);
+
+
+# setup
+#
+MAIN: {
+    my $line;		# logical Makefile dependency line
+    my $continue;	# line continuation string
+    my $indent_width;	# width of indent, assuming tab is 8 characters
+    my $continue_width;	# width of line continuation string
+    my $fh;		# file handle to read from (may be STDIN)
+    my $filename;	# if given on a command line, the file to read
+    my $linenum;	# current physical line number
+    my $continuing;	# 1 ==> logical line is being backslashed continued, 0 ==> logical line ends
+    my $warning_issued;	# 1 ==> a warning about an invalid line was issued, 0 ==> no warnings
+    my $startlinenum;	# record start of a local Makefile dependency line
+    my $linerange;	# range of line numbers for the local Makefile dependency line
+    my $target;		# target (before the :) of a Makefile dependency line
+    my $depstr;		# dependency string (after the :), space separated, of a Makefile dependency line
+    my %target_set;	# hash of target names yielding hash of dependents
+    my @lines;		# array of Makefile dependency lines, with no long line wrapping / continuation
+
+    # setup standard output with auto flush
+    #
+    select(STDOUT);
+    $| = 1;
+
+    # parse args
+    #
+    if (!GetOptions(%optctl)) {
+	error(4, "invalid command line\nusage: $help"); # /*ooo*/
+    }
+
+    # set the defaults
+    #
+    $continue = " \\";
+    $continue_width = length($continue);
+    $indent_width = length(expand($indent));
+    $linenum = 0;
+    $continuing = 0;
+    $warning_issued = 0;
+    $Text::Wrap::columns = $columns;
+    $Text::Wrap::huge = "overflow";
+    $Text::Wrap::separator = "$continue\n";
+
+    # arg checking
+    #
+    if (defined $opt_h) {
+	print "usage: $help\nVersion: $VERSION\n";
+	exit 2;
+    }
+    if (defined $opt_cap_v) {
+	print "$VERSION\n";
+	exit 2;
+    }
+    if ($columns < 0) {
+	error(4, "-w columns must be >= 0"); # /*ooo*/
+    }
+    if ($columns > 0 && $indent_width + length($continue) >= $columns) {
+	error(4, "width: $columns too narrow: indent string width: $indent_width " . # /*ooo*/
+	         "and line continuation width: $continue_width"); # /*ooo*/
+    }
+    if ($#ARGV >= 1) {
+	error(4, "expected 0 or 1 arguments"); # /*ooo*/
+    }
+
+    # open input or use stdin
+    #
+    # We make $fh the open file handle (or die),
+    # and the filename it set to $filename (stdin is "-").
+    #
+    if (defined($ARGV[0])) {
+	$filename = $ARGV[0];
+	if ($filename =~ /^-$/) {
+	    dbg(5, "using filename arg: - for stdin");
+	} else {
+	    dbg(5, "using filename argument: $filename");
+	}
+    } else {
+	$filename = "-";
+	dbg(5, "no filename argument, using stdin as: $filename");
+    }
+    dbg(3, "filename: $filename");
+    open($fh, "< $filename") or
+	error(2, "cannot open $filename: $!"); # /*ooo*/
+    if ($filename =~ /^-$/) {
+	dbg(1, "about to parse: ((STDIN))");
+    } else {
+	dbg(1, "about to parse: $filename");
+    }
+
+    # read each logical Makefile dependency line
+    #
+    # We read lines from the open file, concatenating the next line
+    # if the current line ends with a backslash.  We strip any
+    # trailing backslash when we form the logical line.
+    #
+    while (defined($line = <$fh>)) {
+
+	my @depset;	# an array of dependency filenames
+	my %dep;	# dependency filenames from @dep as a hash
+
+	# read the next logical Makefile dependency line
+	#
+	if ($continuing) {
+	    ++$linenum;
+	} else {
+	    $startlinenum = ++$linenum;
+	}
+	chomp $line;
+	if ($line =~ s/\\$//) {
+	    $line .= <$fh>;
+	    $continuing = 1;
+	    redo unless eof($fh);
+	}
+	$continuing = 0;
+	if ($startlinenum == $linenum) {
+	    $linerange = "line[" . $startlinenum . "]";
+	} else {
+	    $linerange = "line[" . $startlinenum . "-" . $linenum . "]";
+	}
+	dbg(7, "$linerange: raw logical dependency line: <$line>");
+
+	# ignore lines that start with #
+	#
+	if ($line =~ /^#/) {
+	    dbg(7, "$linerange: ignoring # comment");
+	    next;
+	}
+
+	# ignore empty lines
+	#
+	if ($line =~ /^$/) {
+	    dbg(7, "$linerange: ignoring empty line");
+	    next;
+	}
+
+	# ignore whitespace only lines
+	#
+	if ($line =~ /^\s+$/) {
+	    dbg(7, "$linerange: ignoring whitespace only line");
+	    next;
+	}
+
+	# reject, with a warning, any line without a :
+	#
+	if ($line !~ /:/) {
+	    warning("$linerange: does not have a : character, ignoring this line");
+	    $warning_issued = 1;
+	    next;
+	}
+
+	# reject, with a warning, any line with more than 1 :
+	#
+	if ($line =~ /:.*:/) {
+	    warning("$linerange: has multiple : characters, ignoring this line");
+	    $warning_issued = 1;
+	    next;
+	}
+
+	# convert multiple whitespace into a single space
+	#
+	$line =~ s/\s+/ /g;
+
+	# remove whitespace before and after the :
+	#
+	$line =~ s/\s*:\s*/:/;
+	dbg(3, "$linerange: $line");
+
+	# At this point $line is a logical line of the form:
+	#
+	#	foo.o:bar.h baz.h ... end.h
+	#
+	# We need to extract the leading foo.o before the : which is our Makefile rule target.
+	# The other space separated tokens after the : are file dependencies.
+	($target, $depstr) = split(/:/, $line);
+	dbg(5, "target: $target");
+	dbg(5, "dependents: $depstr");
+
+	# initialize target hash if we have a new target
+	#
+	if (! defined($target_set{$target})) {
+	    $target_set{$target} = ();
+	    dbg(7, "initialized target hash for $target");
+	} else {
+	    dbg(7, "target hash $target already exists");
+	}
+
+	# convert the dependency string into an array of dependency filenames
+	#
+	@depset = split(/ /, $depstr);
+
+	# load dependency filenames into a target hash for the target
+	#
+	foreach my $d (@depset) {
+	    $target_set{$target}->{$d} = $d;
+	    dbg(9, "loaded dependency $d into target hash for $target");
+	}
+    }
+    dbg(1, "parsed input");
+
+    # process each dependency target in sorted order
+    #
+    foreach $target (sort keys %target_set) {
+
+        my %dep;	# hash of dependencies for $target
+
+	# case: target has no dependencies
+	#
+	if (! defined($target_set{$target})) {
+	    dbg(3, "target has no dependencies: $target");
+	    push @lines, "$target:";
+	    next;
+	}
+
+	# case: target has dependencies
+	#
+	%dep = %{$target_set{$target}};
+
+	# process each dependency in sorted order for this target
+	#
+	dbg(3, "about to process target: $target");
+	$line = "$target:";
+	foreach my $d (sort keys %dep) {
+	    dbg(3, "target: $target has dependency: $d");
+	    $line .= " $d";
+	}
+	push @lines, $line;
+    }
+    dbg(1, "formed unwrapped lines");
+
+    # process each dependency line formed
+    #
+    foreach $line (@lines) {
+
+	# case: no line columns limitation - print lines directly
+	#
+	if ($columns <= 0) {
+	    print "$line\n";
+
+	# case: line columns set, try to wrap within columns width
+	#
+	} else {
+	    print wrap("", $indent, $line) . "\n";
+	}
+    }
+    dbg(1, "printed wrapped lines");
+
+    # All Done!!! -- Jessica Noll, Age 2
+    #
+    if ($warning_issued) {
+	exit(1); # /*ooo*/
+    }
+    exit(0); # /*ooo*/
+}
+
+
+# error - report an error and exit
+#
+# given:
+#       $exitval	exit code value
+#       $msg ...	error message to print
+#
+sub error($@)
+{
+    my ($exitval) = shift @_;	# get args
+    my $msg;			# error message to print
+
+    # parse args
+    #
+    if (!defined $exitval) {
+	$exitval = 254;
+    }
+    if ($#_ < 0) {
+	$msg = "<<< no message supplied >>>";
+    } else {
+	$msg = join(' ', @_);
+    }
+    if ($exitval =~ /\D/) {
+	$msg .= "<<< non-numeric exit code: $exitval >>>";
+	$exitval = 253;
+    }
+
+    # issue the error message
+    #
+    print STDERR "$0: ERROR[$exitval]: $msg\n";
+
+    # issue an error message
+    #
+    exit($exitval);
+}
+
+
+# warning - report an warning
+#
+# given:
+#       $msg ...	error message to print
+#
+sub warning(@)
+{
+    my $msg;			# error message to print
+
+    # parse args
+    #
+    if ($#_ < 0) {
+	$msg = "<<< no message supplied >>>";
+    } else {
+	$msg = join(' ', @_);
+    }
+
+    # issue the error message
+    #
+    print STDERR "$0: WARNING: $msg\n";
+}
+
+
+# dbg - print a debug message is debug level is high enough
+#
+# given:
+#       $min_lvl	minimum debug level required to print
+#       $msg ...	debug message to print
+#
+# NOTE: The DEBUG[$min_lvl]: header is printed for $min_lvl >= 0 only.
+#
+# NOTE: When $min_lvl <= 0, the message is always printed
+#
+sub dbg($@)
+{
+    my ($min_lvl) = shift @_;	# get args
+    my $msg;			# debug message to print
+
+    # firewall
+    #
+    if (!defined $min_lvl) {
+	error(128, "debug called without a minimum debug level");
+    }
+    if ($min_lvl !~ /-?\d/) {
+	error(129, "debug called with non-numeric debug level: $min_lvl");
+    }
+    if ($opt_v < $min_lvl) {
+	return;
+    }
+    if ($#_ < 0) {
+	$msg = "<<< no message supplied >>>";
+    } else {
+	$msg = join(' ', @_);
+    }
+
+    # issue the debug message
+    #
+    if ($min_lvl < 0) {
+	print STDERR "$msg\n";
+    } else {
+	print STDERR "DEBUG[$min_lvl]: $msg\n";
+    }
+}
