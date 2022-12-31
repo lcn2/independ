@@ -155,7 +155,7 @@ depend: ${ALL_CSRC}
 	    exit 1; \
 	else \
 	    ${SED} -i.orig -n -e '1,/^### DO NOT CHANGE MANUALLY BEYOND THIS LINE/p' Makefile; \
-	    ${CC} ${CFLAGS} -MM -I. ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
+	    ${CC} ${CFLAGS} -MM ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
 	    if ${CMP} -s Makefile.orig Makefile; then \
 		${RM} -f Makefile.orig; \
 	    else \
@@ -192,8 +192,11 @@ Thanks goes to:
 - Developers of [Perl](https://www.perl.org), especially Larry Wall
 - The authors of the [Perl Cookbook](https://www.oreilly.com/library/view/perl-cookbook/1565922433/), Tom Christiansen and Nathan Torkington
 - The authors of the [Text::Wrap CPAN module](https://metacpan.org/pod/Text::Wrap), including David Muir Sharnoff and Tim Pierce
-- Monty Python (the comedians, not that other language that considers whitespace to be of syntactic importance)
-- Sweden, especially the loveli lakes, the wonderful telephone system, and mani interesting furry animals (plus film credit writers)
+- Python (the British comedy troupe, not that other language which
+[considers whitespace to be of syntactic importance](https://medium.com/nerd-for-tech/python-is-a-bad-programming-language-2ab73b0bda5))
+- Sweden, especially the loveli lakes, the wonderful telephone system, and mani interesting furry animals, as well as [Holy Grail film credit writers](https://www.youtube.com/watch?v=SII-jhEd-a0)
+
+NOTE: Monty Python jokes aside, you should really visit Sweden if you can, it is a wonderful country to visit!
 
 
 ## Disclaimer (also also wik)
