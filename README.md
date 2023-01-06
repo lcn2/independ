@@ -132,7 +132,8 @@ Set these Makefiles early in your Makefile:
 ```make
 CC= cc			# or whatever you call your C compiler
 CFLAGS= ... your compiler flags such as -O3 -g3 ...
-INDEPEND= independ	# or whatever you installed independ
+GREP= grep
+INDEPEND= independ
 RM= rm
 SED= sed
 SHELL= bash
@@ -146,15 +147,17 @@ Put these lines at the very end of your Makefile:
 depend: ${ALL_CSRC}
 	@HAVE_INDEPEND="`type -P ${INDEPEND}`"; if [[ -z "$$HAVE_INDEPEND" ]]; then \
 	    echo 'The independ command could not be found.' 1>&2; \
-	    echo 'The independ command is required to run this rule.'; 1>&2; \
+	    echo 'The independ command is required to perform: make $@'; 1>&2; \
 	    echo ''; 1>&2; \
 	    echo 'See the following GitHub repo for where to obtain independ:'; 1>&2; \
 	    echo ''; 1>&2; \
 	    echo '    https://github.com/lcn2/independ'; 1>&2; \
-	    echo ''; 1>&2; \
-	    exit 1; \
 	else \
-	    ${SED} -i.orig -n -e '1,/^### DO NOT CHANGE MANUALLY BEYOND THIS LINE/p' Makefile; \
+	    if ! ${GREP} -q '^### DO NOT CHANGE MANUALLY BEYOND THIS LINE$$' Makefile; then \
+	        echo "make $@ aborting, Makefile missing: ### DO NOT CHANGE MANUALLY BEYOND THIS LINE" 1>&2; \
+		exit 1; \
+	    fi; \
+	    ${SED} -i.orig -n -e '1,/^### DO NOT CHANGE MANUALLY BEYOND THIS LINE$$/p' Makefile; \
 	    ${CC} ${CFLAGS} -MM ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
 	    if ${CMP} -s Makefile.orig Makefile; then \
 		${RM} -f Makefile.orig; \
