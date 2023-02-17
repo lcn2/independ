@@ -132,8 +132,10 @@ Set these Makefiles early in your Makefile:
 ```make
 CC= cc			# or whatever you call your C compiler
 CFLAGS= ... your compiler flags such as -O3 -g3 ...
+CMP = cmp
 GREP= grep
 INDEPEND= independ
+OUR_NAME=  ... the name of your project/tool/program ...
 RM= rm
 SED= sed
 SHELL= bash
@@ -145,29 +147,32 @@ Put these lines at the very end of your Makefile:
 
 ```make
 depend: ${ALL_CSRC}
-	@HAVE_INDEPEND="`type -P ${INDEPEND}`"; if [[ -z "$$HAVE_INDEPEND" ]]; then \
-	    echo 'The independ command could not be found.' 1>&2; \
-	    echo 'The independ command is required to perform: make $@'; 1>&2; \
+	${S} echo
+	${S} echo "${OUR_NAME}: make $@ starting"
+	${Q} if ! type -P ${INDEPEND} >/dev/null 2>&1; then \
+	    echo '${OUR_NAME}: The ${INDEPEND} command could not be found.' 1>&2; \
+	    echo '${OUR_NAME}: The ${INDEPEND} command is required to run the $@ rule'; 1>&2; \
 	    echo ''; 1>&2; \
-	    echo 'See the following GitHub repo for where to obtain independ:'; 1>&2; \
+	    echo 'See the following GitHub repo for ${INDEPEND}:'; 1>&2; \
 	    echo ''; 1>&2; \
 	    echo '    https://github.com/lcn2/independ'; 1>&2; \
 	else \
 	    if ! ${GREP} -q '^### DO NOT CHANGE MANUALLY BEYOND THIS LINE$$' Makefile; then \
-	        echo "make $@ aborting, Makefile missing: ### DO NOT CHANGE MANUALLY BEYOND THIS LINE" 1>&2; \
+	        echo "${OUR_NAME}: make $@ aborting, Makefile missing: ### DO NOT CHANGE MANUALLY BEYOND THIS LINE" 1>&2; \
 		exit 1; \
 	    fi; \
 	    ${SED} -i.orig -n -e '1,/^### DO NOT CHANGE MANUALLY BEYOND THIS LINE$$/p' Makefile; \
-	    ${CC} ${CFLAGS} -MM ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
+	    ${CC} ${CFLAGS} -MM -I. -DMKIOCCCENTRY_USE ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
 	    if ${CMP} -s Makefile.orig Makefile; then \
 		${RM} -f Makefile.orig; \
 	    else \
+		echo "${OUR_NAME}: Makefile dependencies updated"; \
 		echo; \
-		echo "Makefile dependencies updated"; \
-		echo; \
-		echo "Previous version may be found in: Makefile.orig"; \
+		echo "${OUR_NAME}: Previous version may be found in: Makefile.orig"; \
 	    fi; \
 	fi
+	${S} echo
+	${S} echo "${OUR_NAME}: make $@ ending"
 
 ### DO NOT CHANGE MANUALLY BEYOND THIS LINE
 ```
