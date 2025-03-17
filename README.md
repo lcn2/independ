@@ -210,3 +210,8 @@ NOTE: Monty Python jokes aside, you should really visit Sweden if you can, it is
 ## Disclaimer (also also wik)
 
 No programmers who created silly filenames were sacked.
+
+
+# Reporting Security Issues
+
+To report a security issue, please visit "[Reporting Security Issues](https://github.com/lcn2/independ/security/policy)".
