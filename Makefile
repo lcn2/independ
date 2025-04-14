@@ -57,7 +57,8 @@ SHELL= bash
 V=@:
 #V=@
 
-DESTDIR= /usr/local/bin
+PREFIX= /usr/local
+DESTDIR= ${PREFIX}/bin
 
 TARGETS= independ
 
