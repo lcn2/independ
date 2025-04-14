@@ -4,7 +4,7 @@ We take security bugs seriously.  We appreciate your efforts to responsibly
 disclose your findings, and will make every effort to acknowledge your
 contributions for any verified security issues when they have been fixed.
 
-To report a security issue, click on: "[Open a draft security advisory](https://github.com/lcn2/independ/security/advisories/new)"
+To report a security issue, click on: "[Open a draft security advisory](https://github.com/lcn2/savelog/independ/advisories/new)"
 
 We will send a response indicating the next steps in handling your
 report. After the initial reply to your report, we will keep you informed
@@ -13,4 +13,4 @@ additional information or guidance.
 
 ## Supported Versions
 
-Version: 1.00 2022-12-27 and later.
+Version: 1.0.1 2025-04-13 and later.
