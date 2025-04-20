@@ -60,47 +60,6 @@ are combined into a single target, and duplicate dependencies
 dependency files are eliminated.
 
 
-## Command line
-
-```
-usage: ./independ [-h] [-v lvl] [-V] [-i str] [-c columns] [file]
-
-	-h		print this usage message and VERSION string and exit 0
-	-v lvl		verbose / debugging level (def: 0)
-	-V		print version and exit 0
-	-i str		indent continued lines with str (def: "    ")
-			NOTE: A tab in str is counted as a column width of 8.
-
-	-c columns	try to limit dependency lines to columns chars, 0 ==> no limit (def: 76)
-
-			NOTE: If a dependency filename is extremely long (relative to columns), then
-			      the filename will be printed, after the indent (and followed by possible
-			      space backslash, even if such a line is too long.  In all other cases lines
-			      will not exceed a width of columns.
-
-	file		File to read (def: stdin)
-
-			NOTE: If specify reading from stdin, either supply no file argument, or
-			      end command line with: -- -
-
-NOTE: Empty lines, lines with only whitespace, and lines beginning with # are ignored.
-      Lines that end with  (backslash) are assumed to be continued on the next line.
-      If a Makefile dependency rule does not start with a filename followed by a : (colon),
-      or if Makefile dependency rule has more than one : (colon), a warning message is
-      printed on stderr and that line is ignored.
-
-Exit codes:
-     0   all is well
-     1   some warning about invalid lines was printed
-     2   cannot open filename for reading
-     3   -h and help string printed or -V and version string printed
-     4   command line error
- >= 10   internal error
-
-Version: .. the current version string ..
-```
-
-
 ## To install
 
 To install independ:
@@ -182,6 +141,47 @@ Now run the make depend rule:
 
 ```sh
 make depend
+```
+
+
+# To use
+
+```
+/usr/local/bin/independ [-h] [-v lvl] [-V] [-i str] [-c columns] [file]
+
+	-h		print this usage message and VERSION string and exit 0
+	-v lvl		verbose / debugging level (def: 0)
+	-V		print version and exit 0
+	-i str		indent continued lines with str (def: "    ")
+			NOTE: A tab in str is counted as a column width of 8.
+
+	-c columns	try to limit dependency lines to columns chars, 0 ==> no limit (def: 76)
+
+			NOTE: If a dependency filename is extremely long (relative to columns), then
+			      the filename will be printed, after the indent (and followed by possible
+			      space backslash, even if such a line is too long.  In all other cases lines
+			      will not exceed a width of columns.
+
+	file		File to read (def: stdin)
+
+			NOTE: If specify reading from stdin, either supply no file argument, or
+			      end command line with: -- -
+
+NOTE: Empty lines, lines with only whitespace, and lines beginning with # are ignored.
+      Lines that end with  (backslash) are assumed to be continued on the next line.
+      If a Makefile dependency rule does not start with a filename followed by a : (colon),
+      or if Makefile dependency rule has more than one : (colon), a warning message is
+      printed on stderr and that line is ignored.
+
+Exit codes:
+     0   all is well
+     1   some warning about invalid lines was printed
+     2   cannot open filename for reading
+     3   -h and help string printed or -V and version string printed
+     4   command line error
+ >= 10   internal error
+
+Version: .. the current version string ..
 ```
 
 
